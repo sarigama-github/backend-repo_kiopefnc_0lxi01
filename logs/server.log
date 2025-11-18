@@ -1,18 +1,7 @@
 INFO:     Will watch for changes in these directories: ['/home/workspace']
 INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
-INFO:     Started reloader process [245] using StatReload
-INFO:     Started server process [247]
+INFO:     Started reloader process [295] using StatReload
+INFO:     Started server process [297]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
-INFO:     172.20.0.1:55732 - "HEAD / HTTP/1.1" 405 Method Not Allowed
-INFO:     172.20.0.1:42930 - "OPTIONS /api/projects HTTP/1.1" 200 OK
-INFO:     172.20.0.1:42930 - "POST /api/projects HTTP/1.1" 200 OK
-WARNING:  Unsupported upgrade request.
-WARNING:  No supported WebSocket library detected. Please use "pip install 'uvicorn[standard]'", or install 'websockets' or 'wsproto' manually.
-INFO:     172.20.0.1:42932 - "GET /ws/projects/6adddb00-8110-4869-9a33-55f335ce9ff5 HTTP/1.1" 404 Not Found
-INFO:     172.20.0.1:42930 - "POST /api/projects/6adddb00-8110-4869-9a33-55f335ce9ff5/assets HTTP/1.1" 200 OK
-INFO:     172.20.0.1:37112 - "POST /api/projects HTTP/1.1" 200 OK
-INFO:     172.20.0.1:37112 - "POST /api/projects/865b40c6-64eb-4d65-858d-040de48f1228/assets HTTP/1.1" 200 OK
-WARNING:  Unsupported upgrade request.
-WARNING:  No supported WebSocket library detected. Please use "pip install 'uvicorn[standard]'", or install 'websockets' or 'wsproto' manually.
-INFO:     172.20.0.1:37118 - "GET /ws/projects/865b40c6-64eb-4d65-858d-040de48f1228 HTTP/1.1" 404 Not Found
+INFO:     172.20.0.1:48090 - "HEAD / HTTP/1.1" 405 Method Not Allowed
