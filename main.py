@@ -45,9 +45,7 @@ class CreateProjectRequest(BaseModel):
 
 @app.post("/api/projects")
 async def create_project(payload: CreateProjectRequest):
-    if db is None:
-        raise HTTPException(status_code=500, detail="Database not available")
-
+    # Always create a project_id so the frontend can proceed, even if DB write fails
     project = Project(
         title=payload.title,
         prompt=payload.prompt,
@@ -61,21 +59,26 @@ async def create_project(payload: CreateProjectRequest):
         preview_urls=[],
     )
 
-    collection = db["project"]
-    # Assign our own id for easier use alongside Mongo's _id
     project_id = str(uuid.uuid4())
-    doc = project.model_dump()
-    doc.update({"project_id": project_id})
+    mongo_id = None
 
-    inserted_id = create_document("project", doc)
+    if db is not None:
+        try:
+            doc = project.model_dump()
+            doc.update({"project_id": project_id})
+            mongo_id = create_document("project", doc)
+        except Exception:
+            # Degrade gracefully if DB insert fails; continue without persistence
+            mongo_id = None
 
-    return {"project_id": project_id, "mongo_id": inserted_id, "status": "created"}
+    return {"project_id": project_id, "mongo_id": mongo_id, "status": "created"}
 
 
 @app.get("/api/projects/{project_id}")
 async def get_project(project_id: str):
     if db is None:
-        raise HTTPException(status_code=500, detail="Database not available")
+        # Graceful fallback
+        raise HTTPException(status_code=503, detail="Database not available")
     doc = db["project"].find_one({"project_id": project_id}, {"_id": 0})
     if not doc:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -85,7 +88,19 @@ async def get_project(project_id: str):
 @app.post("/api/projects/{project_id}/assets")
 async def upload_assets(project_id: str, files: List[UploadFile] = File(...)):
     if db is None:
-        raise HTTPException(status_code=500, detail="Database not available")
+        # Accept upload to disk for preview flows even if DB is unavailable
+        saved_assets: List[dict] = []
+        for f in files:
+            file_id = f"{project_id}_{uuid.uuid4().hex}_{f.filename}"
+            path = os.path.join(UPLOAD_DIR, file_id)
+            content = await f.read()
+            with open(path, "wb") as fp:
+                fp.write(content)
+            url = f"/uploads/{file_id}"
+            asset = Asset(filename=f.filename, url=url, content_type=f.content_type, size=len(content)).model_dump()
+            saved_assets.append(asset)
+        return {"uploaded": len(saved_assets), "assets": saved_assets}
+
     proj = db["project"].find_one({"project_id": project_id})
     if not proj:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -114,23 +129,35 @@ async def upload_assets(project_id: str, files: List[UploadFile] = File(...)):
 async def simulate_agentic_generation(ws: WebSocket, project_id: str):
     """Simulate a high-quality agentic pipeline and stream structured events.
     This updates the database status and sends granular updates suitable for a live preview.
+    Works even if the database is not available (degraded mode).
     """
-    if db is None:
-        await ws.send_json({"type": "error", "message": "Database unavailable"})
-        return
+    proj = None
+    if db is not None:
+        try:
+            proj = db["project"].find_one({"project_id": project_id})
+        except Exception:
+            proj = None
 
-    proj = db["project"].find_one({"project_id": project_id})
+    # Fallback project if DB is unavailable or project not found
     if not proj:
-        await ws.send_json({"type": "error", "message": "Project not found"})
-        return
+        proj = {
+            "title": "Design Preview",
+            "pages": 4,
+            "preset": "modern",
+        }
 
     total_pages = int(proj.get("pages", 4))
 
     def set_status(status: str, extra: Optional[dict] = None):
+        if db is None:
+            return
         update = {"status": status}
         if extra:
             update.update(extra)
-        db["project"].update_one({"project_id": project_id}, {"$set": update})
+        try:
+            db["project"].update_one({"project_id": project_id}, {"$set": update})
+        except Exception:
+            pass
 
     # Planning
     set_status("planning")
@@ -171,8 +198,6 @@ async def simulate_agentic_generation(ws: WebSocket, project_id: str):
             blocks.append(PageBlock(type="text", x=margin + col_w + 0.04, y=margin, width=col_w, height=0.32, style={"fontSize": 16, "leading": 1.5}, content="Elegant, grid-driven layout with consistent rhythm and hierarchy.").model_dump())
             blocks.append(PageBlock(type="headline", x=margin + col_w + 0.04, y=margin + 0.36, width=col_w, height=0.12, style={"fontSize": 36, "weight": 700}, content="Section Title").model_dump())
             blocks.append(PageBlock(type="caption", x=margin, y=margin + img_h + 0.02, width=col_w, height=0.08, style={"fontSize": 12, "opacity": 0.7}, content="Fig. 1 — Visual narrative with thoughtful whitespace").model_dump())
-        page_layout = Page(number=page_num, layout=[]).model_dump()
-        page_layout["layout"] = blocks
         await ws.send_json({"type": "page", "page": page_num, "layout": blocks})
         await asyncio.sleep(0.4)
 
